@@ -1,0 +1,5 @@
+frontend :npm start
+To run the development server.
+
+for backend : npm start
+To run the backend server.
