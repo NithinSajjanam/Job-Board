@@ -1,4 +1,4 @@
-{
+ {
   "name": "job-board-backend",
   "version": "1.0.0",
   "description": "Backend server for Job Board application",
@@ -20,7 +20,8 @@
     "mammoth": "^1.9.0",
     "mongoose": "^7.0.0",
     "multer": "^1.4.5-lts.2",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "react": "^18.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
