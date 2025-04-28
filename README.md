@@ -1,4 +1,3 @@
-﻿# Job-Board
 # Job-Board
 🚀 Dashboard Project
 A modern and responsive Login + Dashboard application built with React.js.
