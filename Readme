@@ -1,5 +1,5 @@
 frontend :npm start
 To run the development server.
 
-for backend : npm start
+for backend : nodemon index.js
 To run the backend server.
