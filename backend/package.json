@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Backend server for Job Board application",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
@@ -20,10 +21,15 @@
     "mammoth": "^1.9.0",
     "mongoose": "^7.0.0",
     "multer": "^1.4.5-lts.2",
-    "pdf-parse": "^1.1.1",
-    "react": "^18.2.0"
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "MIT"
 }
