@@ -1,10 +1,14 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const app = express();
-require('dotenv').config();
+const dotenv = require('dotenv');
 
-// Importing Routes
+// Load environment variables
+dotenv.config();
+
+const app = express();
+
+// Import Routes
 const authRoutes = require('./routes/auth');
 const jobRoutes = require('./routes/jobs');
 const atsRoutes = require('./routes/ats');
@@ -14,37 +18,37 @@ const interviewPrepRoutes = require('./routes/interviewPrep');
 app.use(cors());
 app.use(express.json());
 
+<<<<<<< HEAD
 
 // Routes
 app.get('/', (req, res) => {
     res.send('Job Board API is running');
 });
 
+=======
+// API Routes
+>>>>>>> ebfd2bb899acdb3252fd145b12f9c601c338ab18
 app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/ats', atsRoutes);
 app.use('/api/interview-prep', interviewPrepRoutes);
 
-// Database Connection
+// Error Handling Middleware (should be after routes)
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+// MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
+  useNewUrlParser: true,
+  useUnifiedTopology: true
 })
-    .then(() => console.log('Connected to MongoDB'))
-    .catch(err => console.error(err));
+.then(() => console.log('✅ Connected to MongoDB'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Start Server
 const PORT = process.env.PORT || 5000;
-
-// Global error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Something went wrong!' });
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-
-
-
-
