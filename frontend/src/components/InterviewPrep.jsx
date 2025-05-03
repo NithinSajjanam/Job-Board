@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from '../api/axios';
+import axios from '../api/axios'; // Ensure axios is configured to point to your backend
 import '@fontsource/inter'; // Make sure this is installed in your project
 
 function InterviewPrep() {
@@ -9,6 +9,7 @@ function InterviewPrep() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Handle form submission
   const handleSubmit = async () => {
     if (!resume) {
       setError('Please upload a resume file.');
@@ -22,6 +23,7 @@ function InterviewPrep() {
     setLoading(true);
     setQuestions(null);
 
+    // Prepare the form data
     const formData = new FormData();
     formData.append('resume', resume);
     formData.append('jobDescription', jobDesc);
@@ -30,7 +32,11 @@ function InterviewPrep() {
       const response = await axios.post('/interview-prep/interview-questions', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setQuestions(response.data.interviewQuestions);
+
+      // Handle the response based on the structure returned by your backend
+      const interviewQuestions = response.data.questionsAndAnswers;
+
+      setQuestions(interviewQuestions);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to generate interview questions');
       setQuestions(null);
@@ -39,6 +45,7 @@ function InterviewPrep() {
     }
   };
 
+  // Clear the form and reset the state
   const handleClear = () => {
     setResume(null);
     setJobDesc('');
@@ -48,7 +55,7 @@ function InterviewPrep() {
 
   return (
     <div className="container mx-auto px-6 py-10 font-[Inter] max-w-4xl">
-      <h2 className="text-3xl font-extrabold mb-8 text-center text-green-800">Interview Preparation </h2>
+      <h2 className="text-3xl font-extrabold mb-8 text-center text-green-800">Interview Preparation</h2>
 
       <div className="mb-6">
         <label className="block text-lg font-medium mb-2 text-gray-700">Upload Resume</label>
@@ -56,9 +63,7 @@ function InterviewPrep() {
           type="file"
           accept=".pdf,.doc,.docx"
           onChange={(e) => setResume(e.target.files[0])}
-          className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6
-            file:rounded-lg file:border-0 file:text-sm file:font-semibold
-            file:bg-green-100 file:text-green-700 hover:file:bg-green-200"
+          className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200"
         />
       </div>
 
@@ -108,7 +113,14 @@ function InterviewPrep() {
         <div className="space-y-6 bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
           <div className="p-4 bg-green-50 rounded-lg shadow-inner">
             <h3 className="text-xl font-bold mb-2 text-green-800">Generated Interview Questions</h3>
-            <pre className="whitespace-pre-wrap text-base text-gray-700">{questions}</pre>
+            <div className="space-y-4">
+              {questions.map((qa, index) => (
+                <div key={index}>
+                  <h4 className="text-lg font-semibold text-gray-800">Q{index + 1}: {qa.question}</h4>
+                  <p className="text-gray-700">A: {qa.answer}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

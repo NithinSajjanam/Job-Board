@@ -1,7 +1,7 @@
-const crypto = require('crypto');
-
-function generateResetToken() {
+import crypto from 'crypto';
+export function generateResetToken() {
     return crypto.randomBytes(32).toString('hex');
 }
 
-module.exports = { generateResetToken };
+
+

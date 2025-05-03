@@ -1,32 +1,73 @@
-require('dotenv').config();
-const express = require('express');
-const multer = require('multer');
-const pdfParse = require('pdf-parse');
-const mammoth = require('mammoth');
-const fs = require('fs');
-const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const router = express.Router();
+import express from 'express';
+import multer from 'multer';
+import mammoth from 'mammoth';
+import fs from 'fs';
+import path from 'path';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import 'dotenv/config';
+import pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
 
+pdfjs.GlobalWorkerOptions.workerSrc = path.join(
+  process.cwd(),
+  'node_modules/pdfjs-dist/build/pdf.worker.js'
+);
+
+// --- Configuration ---
+const router = express.Router();
 const upload = multer({ dest: 'uploads/' });
 
 if (!process.env.GEMINI_API_KEY) {
-  console.error('GEMINI_API_KEY not set in environment');
-  throw new Error('Server configuration error: missing GEMINI_API_KEY');
+  console.error('FATAL ERROR: GEMINI_API_KEY is not set in the environment variables.');
+  process.exit(1);
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Unified analyze-ai endpoint with optional analysisType parameter
+// Optional Safety Settings (currently commented out)
+/*
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+];
+*/
+
+// --- Helper Function ---
+const cleanupFile = (filePath) => {
+  if (filePath && fs.existsSync(filePath)) {
+    fs.unlink(filePath, (err) => {
+      if (err) console.error(`Error deleting file ${filePath}:`, err);
+    });
+  }
+};
+
+// --- Main AI Analysis Route ---
 router.post('/analyze-ai', upload.single('resume'), async (req, res) => {
+  const tempFilePath = req.file?.path;
+
   try {
     const jobDesc = req.body.jobDescription;
-    const analysisType = req.body.analysisType || 'resumeAnalysis'; // default to resumeAnalysis
+    const analysisType = req.body.analysisType || 'resumeAnalysis';
+
     if (!jobDesc) {
-      return res.status(400).json({ error: 'Job description is required' });
+      cleanupFile(tempFilePath);
+      return res.status(400).json({ error: 'Job description is required.' });
     }
     if (!req.file) {
-      return res.status(400).json({ error: 'Resume file is required' });
+      return res.status(400).json({ error: 'Resume file is required.' });
     }
 
     const file = req.file;
@@ -34,81 +75,107 @@ router.post('/analyze-ai', upload.single('resume'), async (req, res) => {
     const fileBuffer = fs.readFileSync(file.path);
     let resumeText = '';
 
+    // --- Resume Text Extraction ---
     if (ext === '.pdf') {
-      const pdfData = await pdfParse(fileBuffer);
-      resumeText = pdfData.text;
+      const pdfData = new Uint8Array(fileBuffer);
+      const pdf = await pdfjs.getDocument({ data: pdfData }).promise;
+
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str || '').join(' ');
+        fullText += pageText + '\n';
+      }
+      resumeText = fullText;
     } else if (ext === '.docx') {
       const result = await mammoth.extractRawText({ buffer: fileBuffer });
       resumeText = result.value;
     } else {
-      fs.unlinkSync(file.path);
+      cleanupFile(tempFilePath);
       return res.status(400).json({ error: 'Unsupported file type. Please upload PDF or DOCX.' });
     }
 
+    if (!resumeText.trim()) {
+      cleanupFile(tempFilePath);
+      return res.status(400).json({ error: 'Could not extract text from the resume.' });
+    }
+
+    // --- Prompt Generation ---
     let prompt = '';
     if (analysisType === 'interviewQuestions') {
       prompt = `
-You are an AI interview coach. Based on the following resume and job description, generate a list of personalized interview questions that focus on the applicant's skills and experience.
+Generate a list of 5-7 personalized interview questions based on the following resume and job description. Focus on verifying the candidate's skills and experience mentioned in the resume as they relate to the job requirements. Output ONLY the numbered list of questions.
 
-Resume:
+Resume Text:
+---
 ${resumeText}
+---
 
 Job Description:
+---
 ${jobDesc}
+---
 
-Please provide the questions as a numbered list.
+Questions:
 `;
     } else {
-      // Default to resume analysis
       prompt = `
-Compare the following resume and job description. 
-Give a match percentage, strengths, and list missing skills/keywords.
+Analyze the following resume against the job description. Provide:
+1. Match Percentage (e.g., "Match Percentage: 85%").
+2. Key Strengths: A bulleted list of the candidate's relevant skills/experiences found in the resume that match the job description.
+3. Missing Keywords/Skills: A bulleted list of important keywords or skills mentioned in the job description that are NOT clearly present in the resume.
+4. Brief Summary: A short (1-2 sentence) summary of the candidate's fit for the role.
 
-Resume:
+Resume Text:
+---
 ${resumeText}
+---
 
 Job Description:
+---
 ${jobDesc}
+---
+
+Analysis:
 `;
     }
 
-    try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const aiText = await response.text();
+    // --- Gemini API Call ---
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      // safetySettings, // Uncomment if needed
+    });
 
-      fs.unlinkSync(file.path); // clean up
+    const apiResult = await model.generateContent(prompt);
+    const response = apiResult.response;
 
-      if (analysisType === 'interviewQuestions') {
-        res.json({ interviewQuestions: aiText });
-      } else {
-        res.json({ result: aiText });
-      }
-    } catch (apiErr) {
-      console.error('Gemini API call failed:', apiErr);
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      res.status(500).json({ error: 'Gemini API call failed' });
+    let aiText = '';
+    if (response?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      aiText = response.candidates[0].content.parts[0].text;
+    } else if (response?.candidates?.[0]?.finishReason !== 'STOP') {
+      aiText = `AI generation finished unexpectedly. Reason: ${response.candidates[0].finishReason}`;
+      console.warn(`Gemini generation finish reason: ${response.candidates[0].finishReason}`);
+    } else {
+      aiText = "Error: Could not retrieve analysis from AI.";
+      console.error('Gemini API returned an unexpected structure:', JSON.stringify(response));
     }
+
+    cleanupFile(tempFilePath);
+
+    res.json(analysisType === 'interviewQuestions'
+      ? { interviewQuestions: aiText }
+      : { result: aiText });
+
   } catch (err) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    console.error('Gemini AI analysis failed:', err);
-    res.status(500).json({ error: 'Gemini AI analysis failed' });
+    console.error('Error during analysis:', err);
+    cleanupFile(tempFilePath);
+    const isNetworkError = err.message?.includes('axios') || err.message?.includes('fetch');
+    res.status(isNetworkError ? 502 : 500).json({
+      error: isNetworkError ? 'AI service communication failed' : 'AI analysis failed',
+      details: err.message,
+    });
   }
 });
 
-router.get('/list-models', async (req, res) => {
-  try {
-    const models = await genAI.listModels();
-    res.json(models);
-  } catch (err) {
-    console.error('Error listing models:', err);
-    res.status(500).json({ error: 'Failed to list models' });
-  }
-});
-
-module.exports = router;
+export default router;

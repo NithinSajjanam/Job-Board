@@ -1,15 +1,37 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const { generateResetToken } = require('../utils/token');
+import express from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import { generateResetToken } from '../utils/token.js';
+import nodemailer from 'nodemailer';
+
 const router = express.Router();
+
+// Setup nodemailer transporter (configure with your email service credentials)
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+});
+
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
 
 router.post('/register', async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
         return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    if (!validateEmail(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
     }
 
     try {
@@ -43,6 +65,10 @@ router.post('/login', async (req, res) => {
 
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (!validateEmail(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
     }
 
     try {
@@ -80,6 +106,10 @@ router.post('/forgot-password', async (req, res) => {
         return res.status(400).json({ error: 'Email is required' });
     }
 
+    if (!validateEmail(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+    }
+
     try {
         const user = await User.findOne({ email });
         if (!user) {
@@ -91,9 +121,18 @@ router.post('/forgot-password', async (req, res) => {
         user.passwordResetExpires = Date.now() + 3600000; // 1 hour
         await user.save();
 
-        // TODO: Send resetToken via email to user.email
-        // For now, return the token in response for testing
-        res.json({ message: 'Password reset token generated', resetToken });
+        // Send resetToken via email to user.email
+        const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+        const mailOptions = {
+            from: process.env.SMTP_FROM,
+            to: user.email,
+            subject: 'Password Reset Request',
+            text: `You requested a password reset. Please use the following link to reset your password: ${resetUrl}\n\nIf you did not request this, please ignore this email.`,
+        };
+
+        await transporter.sendMail(mailOptions);
+
+        res.json({ message: 'Password reset email sent' });
     } catch (error) {
         console.error('Forgot password error:', error);
         res.status(500).json({ error: error.message || 'Server error' });
@@ -129,4 +168,4 @@ router.post('/reset-password', async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;
