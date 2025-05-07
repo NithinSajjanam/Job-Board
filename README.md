@@ -2,7 +2,6 @@
 🚀 Dashboard Project
 A modern and responsive Login + Dashboard application built with React.js.
 Includes user authentication, upcoming events calendar, and a floating support chatbot for user help.
-![ChatGPT Image May 7, 2025, 03_02_17 PM](https://github.com/user-attachments/assets/56de7cda-5303-4a80-85a2-3dc89f91e114)
 
 
 
